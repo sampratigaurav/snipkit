@@ -1,0 +1,22 @@
+# Dependencies (dev-only, not part of the extension)
+node_modules/
+scripts/node_modules/
+package-lock.json
+
+# Build output
+dist/
+
+# Packaged extension archives
+*.zip
+*.crx
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor and tool directories
+.vscode/
+.idea/
+*.suo
+*.user
