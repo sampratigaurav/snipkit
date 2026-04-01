@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnipKit</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <!-- 1. HEADER -->
+  <header class="app-header">
+    <div class="app-title">
+      <span class="dot-indicator"></span>
+      <span class="app-name">SnipKit</span>
+    </div>
+    <span id="snippet-count" class="snippet-count-badge">0 snippets</span>
+  </header>
+
+  <!-- 2. SEARCH BAR -->
+  <div class="search-wrapper">
+    <input type="search" id="search-input" placeholder="Search snippets…" autocomplete="off" spellcheck="false">
+  </div>
+
+  <!-- 3. CATEGORY FILTER BAR -->
+  <div class="category-bar">
+    <button class="cat-pill active" data-category="all">All</button>
+    <button class="cat-pill" data-category="work">Work</button>
+    <button class="cat-pill" data-category="hackathon">Hackathon</button>
+    <button class="cat-pill" data-category="github">GitHub</button>
+    <button class="cat-pill" data-category="other">Other</button>
+  </div>
+
+  <!-- 4. SNIPPET LIST -->
+  <ul id="snippet-list" role="list">
+    <div id="empty-state">No snippets yet. Add your first one.</div>
+  </ul>
+
+  <!-- 5. ACTION BAR -->
+  <div id="action-bar">
+    <button id="btn-new">＋ New snippet</button>
+    <button id="btn-import">⬇ Import</button>
+    <button id="btn-export">⬆ Export</button>
+  </div>
+
+  <!-- PALETTE HINT -->
+  <div id="palette-hint">⚡ Ctrl+Shift+Space → palette · Ctrl+Shift+V to paste in Docs</div>
+
+  <!-- 6. MODAL -->
+  <div id="modal-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div id="modal-card">
+      <div class="modal-title" id="modal-title">New snippet</div>
+
+      <label class="field-label" for="modal-trigger">Trigger</label>
+      <input type="text" id="modal-trigger" class="modal-input" placeholder="\your-trigger" spellcheck="false" autocomplete="off">
+      <div id="trigger-error" class="field-error" role="alert"></div>
+
+      <label class="field-label" for="modal-expansion">Expansion</label>
+      <textarea id="modal-expansion" class="modal-textarea" placeholder="The full text to inject when trigger fires..." rows="4" spellcheck="false"></textarea>
+
+      <label class="field-label" for="modal-category">Category</label>
+      <select id="modal-category" class="modal-select">
+        <option value="work">Work</option>
+        <option value="hackathon">Hackathon</option>
+        <option value="github">GitHub</option>
+        <option value="other">Other</option>
+      </select>
+
+      <div class="modal-actions">
+        <button id="btn-cancel" class="btn-cancel">Cancel</button>
+        <button id="btn-save" class="btn-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. HIDDEN FILE INPUT -->
+  <input type="file" id="file-input" accept=".json" style="display:none">
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

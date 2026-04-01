@@ -1,0 +1,515 @@
+/* SnipKit - popup.css */
+
+/* ============================================================
+   CSS VARIABLES
+   ============================================================ */
+:root {
+  --bg:          #0d0d0b;
+  --bg2:         #131311;
+  --bg3:         #1a1a17;
+  --border:      rgba(255,255,255,0.08);
+  --border2:     rgba(255,255,255,0.14);
+  --text:        #e8e6df;
+  --muted:       #7a7870;
+  --subtle:      #4a4844;
+  --accent:      #1D9E75;
+  --accent-bg:   rgba(29,158,117,0.12);
+  --accent-text: #5DCAA5;
+  --danger:      #E24B4A;
+  --danger-bg:   rgba(226,75,74,0.12);
+}
+
+/* ============================================================
+   RESET
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================
+   BODY
+   ============================================================ */
+body {
+  width: 340px;
+  min-height: 200px;
+  max-height: 560px;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--subtle) transparent;
+}
+
+body::-webkit-scrollbar { width: 4px; }
+body::-webkit-scrollbar-track { background: transparent; }
+body::-webkit-scrollbar-thumb { background: var(--subtle); border-radius: 2px; }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.app-name {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(29,158,117,0.5); }
+  50%       { box-shadow: 0 0 0 4px rgba(29,158,117,0); }
+}
+
+.snippet-count-badge {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg3);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* ============================================================
+   SEARCH BAR
+   ============================================================ */
+.search-wrapper {
+  padding: 8px 14px 0;
+}
+
+#search-input {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+  /* Remove native search input chrome */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#search-input:focus {
+  border-color: var(--accent);
+}
+
+#search-input::placeholder {
+  color: var(--subtle);
+}
+
+/* Hide the native clear (×) button on search inputs */
+#search-input::-webkit-search-cancel-button { display: none; }
+
+/* ============================================================
+   CATEGORY FILTER BAR
+   ============================================================ */
+.category-bar {
+  display: flex;
+  gap: 5px;
+  padding: 8px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.category-bar::-webkit-scrollbar { display: none; }
+
+.cat-pill {
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 11px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.cat-pill:hover {
+  background: var(--bg2);
+  color: var(--text);
+}
+
+.cat-pill.active {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+/* ============================================================
+   SNIPPET LIST
+   ============================================================ */
+#snippet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.snippet-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.snippet-item:hover {
+  background: var(--bg2);
+}
+
+.snippet-item:last-child {
+  border-bottom: none;
+}
+
+.trigger-pill {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  border: 1px solid rgba(29,158,117,0.25);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.expansion-preview {
+  font-size: 11px;
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg3);
+  color: var(--subtle);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.edit-btn,
+.delete-btn {
+  font-size: 13px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.edit-btn {
+  color: var(--muted);
+}
+
+.edit-btn:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+
+.delete-btn {
+  color: var(--subtle);
+}
+
+.delete-btn:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+#empty-state {
+  text-align: center;
+  padding: 36px 20px;
+  font-size: 12px;
+  color: var(--subtle);
+  line-height: 1.7;
+}
+
+/* ============================================================
+   ACTION BAR
+   ============================================================ */
+#action-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+}
+
+#btn-new {
+  flex: 1;
+  height: 32px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+#btn-new:hover {
+  opacity: 0.88;
+}
+
+#btn-import,
+#btn-export {
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+#btn-import:hover,
+#btn-export:hover {
+  background: var(--bg2);
+  color: var(--text);
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+#modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+#modal-overlay.hidden {
+  display: none !important;
+}
+
+#modal-card {
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 20px;
+  width: 100%;
+  max-width: 300px;
+  border: 1px solid var(--border2);
+  animation: modal-in 0.15s ease;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.field-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 5px;
+  margin-top: 12px;
+}
+
+.field-label:first-of-type {
+  margin-top: 0;
+}
+
+.modal-input,
+.modal-textarea,
+.modal-select {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modal-input:focus,
+.modal-textarea:focus,
+.modal-select:focus {
+  border-color: var(--accent);
+}
+
+.modal-input::placeholder,
+.modal-textarea::placeholder {
+  color: var(--subtle);
+}
+
+.modal-textarea {
+  min-height: 80px;
+  resize: vertical;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.modal-select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237a7870' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.modal-select option {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.field-error {
+  font-size: 10px;
+  color: var(--danger);
+  margin-top: 4px;
+  min-height: 14px;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-save {
+  padding: 7px 18px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-save:hover {
+  opacity: 0.88;
+}
+
+.btn-cancel {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-cancel:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+/* ============================================================
+   MICRO-ANIMATIONS — ensure easing is explicit on all interactive elements
+   ============================================================ */
+.snippet-item            { transition: background 0.1s ease; }
+#btn-new                 { transition: opacity 0.15s ease; }
+.cat-pill                { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+.modal-input,
+.modal-textarea,
+.modal-select            { transition: border-color 0.15s ease; }
+
+/* ============================================================
+   UTILITY ANIMATIONS
+   ============================================================ */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
+
+.shake {
+  animation: shake 0.3s ease;
+}
+
+.error-border {
+  border-color: var(--danger) !important;
+}
+
+/* ============================================================
+   PALETTE HINT
+   ============================================================ */
+#palette-hint {
+  text-align: center;
+  font-size: 10px;
+  color: var(--subtle);
+  padding: 6px 14px 10px;
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+
