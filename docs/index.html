@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnipKit — Keyboard-driven text expansion for developers</title>
+  <meta name="description" content="Type a trigger like \stack and instantly inject your full tech stack anywhere on the web. A free Chrome extension for developers.">
+  <meta property="og:title" content="SnipKit — Text expansion for developers">
+  <meta property="og:description" content="Type \stack. Get your full tech stack. No copy-paste. No app switching. Free Chrome extension.">
+  <meta name="theme-color" content="#0d0d0b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0b;
+      --bg2: #131311;
+      --bg3: #1a1a17;
+      --border: rgba(255,255,255,0.07);
+      --border2: rgba(255,255,255,0.12);
+      --text: #e8e6df;
+      --muted: #7a7870;
+      --subtle: #4a4844;
+      --accent: #1D9E75;
+      --accent-bg: rgba(29,158,117,0.1);
+      --accent-text: #5DCAA5;
+      --mono: 'DM Mono', monospace;
+      --sans: 'DM Sans', system-ui, sans-serif;
+      --serif: 'Instrument Serif', Georgia, serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      background: rgba(13,13,11,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .nav-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(29,158,117,0.5);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .nav-links a:hover { color: var(--text); transition: color 0.15s; }
+
+    .btn-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #e8e6df;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 16px;
+      border-radius: 6px;
+      transition: opacity 0.15s, transform 0.15s;
+      font-family: var(--sans);
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-glow {
+      position: absolute;
+      width: 700px; height: 500px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(ellipse at center,
+        rgba(29,158,117,0.07) 0%,
+        rgba(29,158,117,0.02) 45%,
+        transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-text);
+      background: var(--accent-bg);
+      border: 1px solid rgba(29,158,117,0.25);
+      border-radius: 20px;
+      padding: 4px 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+      opacity: 0;
+      animation: fade-up 0.6s ease 0.1s forwards;
+    }
+
+    .hero-headline {
+      font-family: var(--serif);
+      font-size: clamp(42px, 6vw, 72px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      max-width: 760px;
+      opacity: 0;
+      animation: fade-up 0.6s ease 0.2s forwards;
+    }
+
+    .hero-headline em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .hero-sub {
+      margin-top: 20px;
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 520px;
+      line-height: 1.65;
+      opacity: 0;
+      animation: fade-up 0.6s ease 0.35s forwards;
+    }
+
+    .hero-actions {
+      margin-top: 36px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+      opacity: 0;
+      animation: fade-up 0.6s ease 0.48s forwards;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #e8e6df;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 8px;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-2px); }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 15px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+    .hero-note {
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--subtle);
+      letter-spacing: 0.04em;
+      opacity: 0;
+      animation: fade-up 0.6s ease 0.58s forwards;
+    }
+
+    .hero-note span { color: var(--accent-text); }
+
+    /* ── DEMO SECTION ── */
+    .section {
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-text);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-family: var(--serif);
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .section-sub {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 540px;
+      margin-bottom: 40px;
+      line-height: 1.65;
+    }
+
+    /* Demo card */
+    .demo-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .demo-browser-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg3);
+    }
+
+    .browser-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+
+    .bd-r { background: rgba(255,100,100,0.4); }
+    .bd-y { background: rgba(255,200,50,0.4); }
+    .bd-g { background: rgba(50,200,100,0.4); }
+
+    .browser-url {
+      margin-left: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--subtle);
+    }
+
+    .demo-body {
+      padding: 24px 28px;
+    }
+
+    .demo-form-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .demo-field {
+      margin-bottom: 16px;
+    }
+
+    .demo-field-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .demo-input {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 7px;
+      padding: 10px 13px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .demo-input.active {
+      border-color: rgba(29,158,117,0.35);
+      background: rgba(29,158,117,0.05);
+      color: var(--accent-text);
+    }
+
+    .trigger-text {
+      display: inline;
+      background: rgba(29,158,117,0.15);
+      color: var(--accent-text);
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+
+    .cursor-blink {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: var(--accent-text);
+      vertical-align: middle;
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Trigger pills */
+    .trigger-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .trigger-pill {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent-text);
+      background: var(--accent-bg);
+      border: 1px solid rgba(29,158,117,0.25);
+      border-radius: 6px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      user-select: none;
+    }
+
+    .trigger-pill:hover {
+      background: rgba(29,158,117,0.18);
+      border-color: rgba(29,158,117,0.4);
+      transform: translateY(-1px);
+    }
+
+    .trigger-pill.fired {
+      background: rgba(29,158,117,0.25);
+      border-color: rgba(29,158,117,0.5);
+    }
+
+    .pill-hint {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--subtle);
+      margin-top: 12px;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .how-section {
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 40px;
+    }
+
+    .step {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+    }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-text);
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+
+    .step-desc {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── FEATURES ── */
+    .features-section {
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+    }
+
+    .feature-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: rgba(255,255,255,0.12); }
+
+    .feature-icon {
+      font-size: 22px;
+      margin-bottom: 14px;
+    }
+
+    .feature-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .feature-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ── PRIVACY STRIP ── */
+    .privacy-strip {
+      margin: 0 24px;
+      max-width: 852px;
+      margin-left: auto;
+      margin-right: auto;
+      background: rgba(29,158,117,0.06);
+      border: 1px solid rgba(29,158,117,0.15);
+      border-radius: 14px;
+      padding: 36px 40px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .privacy-icon {
+      font-size: 32px;
+      flex-shrink: 0;
+    }
+
+    .privacy-headline {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .privacy-desc {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .privacy-desc a {
+      color: var(--accent-text);
+    }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      padding: 100px 24px;
+      text-align: center;
+    }
+
+    .cta-headline {
+      font-family: var(--serif);
+      font-size: clamp(32px, 5vw, 54px);
+      letter-spacing: -0.02em;
+      color: var(--text);
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .cta-sub {
+      font-size: 16px;
+      color: var(--muted);
+      margin-bottom: 36px;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      font-size: 13px;
+      color: var(--subtle);
+    }
+
+    .footer-links a:hover { color: var(--muted); }
+
+    .footer-credit {
+      font-size: 12px;
+      color: var(--subtle);
+      font-family: var(--mono);
+    }
+
+    .footer-credit a { color: var(--muted); }
+    .footer-credit a:hover { color: var(--accent-text); }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 720px) {
+      .steps { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .privacy-strip { flex-direction: column; padding: 28px 24px; }
+      .nav-links { display: none; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">
+      <div class="nav-dot"></div>
+      SnipKit
+    </div>
+    <div class="nav-links">
+      <a href="#demo">Demo</a>
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="https://github.com/sampratigaurav/snipkit">GitHub ↗</a>
+    </div>
+    <a class="btn-cta" href="https://chrome.google.com/webstore" target="_blank" rel="noopener">
+      Add to Chrome — Free
+    </a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-tag">Chrome Extension · Manifest V3</div>
+    <h1 class="hero-headline">
+      Stop copy-pasting.<br><em>Start typing.</em>
+    </h1>
+    <p class="hero-sub">
+      Map short triggers to your most-used text blocks.
+      Type <code style="font-family:var(--mono);font-size:0.9em;color:var(--accent-text);">\stack</code> anywhere on the web and your full tech stack appears — instantly.
+    </p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="https://chrome.google.com/webstore" target="_blank" rel="noopener">
+        Add to Chrome — Free
+      </a>
+      <a class="btn-ghost" href="https://github.com/sampratigaurav/snipkit" target="_blank" rel="noopener">
+        View on GitHub
+      </a>
+    </div>
+    <p class="hero-note">
+      <span>// </span>No account required · No data leaves your browser
+    </p>
+  </section>
+
+  <!-- DEMO -->
+  <section class="section" id="demo">
+    <div class="section-label">Interactive Demo</div>
+    <h2 class="section-title">See it in action</h2>
+    <p class="section-sub">
+      Click any trigger below. Watch it appear in the field, then expand instantly — the same way it works on any website.
+    </p>
+
+    <div class="demo-card">
+      <div class="demo-browser-bar">
+        <div class="browser-dot bd-r"></div>
+        <div class="browser-dot bd-y"></div>
+        <div class="browser-dot bd-g"></div>
+        <span class="browser-url">hackathon-registration.dev/apply</span>
+      </div>
+      <div class="demo-body">
+        <div class="demo-form-title">Hackathon Registration — DevFest 2025</div>
+
+        <div class="demo-field">
+          <div class="demo-field-label">Tech Stack Used</div>
+          <div class="demo-input" id="field-stack">
+            <span class="cursor-blink" id="cursor-stack"></span>
+          </div>
+        </div>
+
+        <div class="demo-field">
+          <div class="demo-field-label">University ID</div>
+          <div class="demo-input" id="field-usn">
+            <span class="cursor-blink" id="cursor-usn" style="display:none"></span>
+          </div>
+        </div>
+
+        <div class="demo-field">
+          <div class="demo-field-label">About You</div>
+          <div class="demo-input" id="field-intro" style="min-height:52px;align-items:flex-start;padding-top:12px;">
+            <span class="cursor-blink" id="cursor-intro" style="display:none"></span>
+          </div>
+        </div>
+
+        <div class="trigger-pills">
+          <div class="trigger-pill" data-trigger="\stack" data-field="stack">⚡ \stack</div>
+          <div class="trigger-pill" data-trigger="\usn" data-field="usn">\usn</div>
+          <div class="trigger-pill" data-trigger="\intro" data-field="intro">\intro</div>
+          <div class="trigger-pill" data-trigger="\repo" data-field="stack">\repo</div>
+          <div class="trigger-pill" data-trigger="\pr" data-field="intro">\pr</div>
+        </div>
+        <div class="pill-hint">← Click a trigger to see expansion</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section" id="how">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-title">Three steps, then you're done</h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01 — MAP</div>
+        <div class="step-title">Create your snippets in the popup</div>
+        <div class="step-desc">Click the SnipKit icon. Hit "+ New snippet." Map a trigger like <span style="font-family:var(--mono);color:var(--accent-text);font-size:12px;">\stack</span> to any block of text. Your tech stack, your bio, your PR template — anything you retype.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">02 — TYPE</div>
+        <div class="step-title">Use your trigger in any text field</div>
+        <div class="step-desc">Go to any webpage. Click into any input, textarea, or editor. Type your trigger. SnipKit watches as you type — no hotkey, no menu, no interruption to your flow.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">03 — EXPAND</div>
+        <div class="step-title">Watch it expand instantly</div>
+        <div class="step-desc">The trigger is replaced by your full text the moment you finish typing it. Cursor lands right at the end. Keep going — the form fills itself.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features-section" id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Built for real developer workflows</h2>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Works everywhere</div>
+        <div class="feature-desc">Standard inputs, textareas, contenteditable editors (GitHub, Notion, Linear). For canvas-based editors like Google Docs, the command palette copies to clipboard in one keypress.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⌨</div>
+        <div class="feature-title">Command palette</div>
+        <div class="feature-desc">Press <span style="font-family:var(--mono);font-size:12px;color:var(--accent-text);">Ctrl+Shift+Space</span> on any page to open a floating search palette. Arrow keys to navigate, Enter to select. Works even on Google Docs.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📂</div>
+        <div class="feature-title">Organized library</div>
+        <div class="feature-desc">Tag snippets as Work, Hackathon, GitHub, or Other. Filter by category. Search by trigger or expansion text. Usage counter shows which snippets pull their weight.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <div class="feature-title">Import & Export</div>
+        <div class="feature-desc">Your snippet library exports as clean JSON. Import from any compatible file. Back up, migrate between Chrome profiles, or share your library with your team.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRIVACY STRIP -->
+  <div class="privacy-strip">
+    <div class="privacy-icon">🔒</div>
+    <div>
+      <div class="privacy-headline">Your data never leaves your browser</div>
+      <div class="privacy-desc">
+        SnipKit has no backend, no account, no analytics, and no network requests.
+        Snippets are stored in <span style="font-family:var(--mono);font-size:13px;color:var(--accent-text);">chrome.storage.local</span> — 
+        on your device, under your control.
+        <a href="privacy-policy.html">Read the full privacy policy →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <h2 class="cta-headline">Your clipboard is<br><em style="font-family:var(--serif);font-style:italic;color:var(--accent);">free now.</em></h2>
+    <p class="cta-sub">Add SnipKit and start expanding in 30 seconds.</p>
+    <a class="btn-primary" href="https://chrome.google.com/webstore" target="_blank" rel="noopener" style="font-size:16px; padding:14px 32px; display:inline-flex;">
+      Add to Chrome — Free
+    </a>
+    <p style="margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--subtle);">
+      // No sign-up · No data collection · Open source
+    </p>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">
+      <div class="nav-dot" style="box-shadow:none;"></div>
+      SnipKit
+    </div>
+    <div class="footer-links">
+      <a href="privacy-policy.html">Privacy Policy</a>
+      <a href="https://github.com/sampratigaurav/snipkit">GitHub</a>
+      <a href="https://github.com/sampratigaurav/snipkit/issues">Report a Bug</a>
+    </div>
+    <div class="footer-credit">
+      built by <a href="https://github.com/sampratigaurav">Samprati Gaurav</a>
+    </div>
+  </footer>
+
+  <script>
+    const expansions = {
+      '\\stack': 'React · TypeScript · Node.js · Socket.io · PostgreSQL · Tailwind CSS',
+      '\\usn':   '1DS22CS094 — Samprati Gaurav, Dayananda Sagar University',
+      '\\intro': "Hi, I'm Sam — a 2nd-year CS (Cyber Security) student at DSU. I build and ship web apps independently.",
+      '\\repo':  'https://github.com/sampratigaurav — SyncWatch, Duet, SnipKit',
+      '\\pr':    '## Summary\n**What**: \n**Why**: \n**Testing**: ',
+    };
+
+    const fields = {
+      stack: document.getElementById('field-stack'),
+      usn:   document.getElementById('field-usn'),
+      intro: document.getElementById('field-intro'),
+    };
+
+    // Reset all fields to empty + cursor
+    function resetField(id) {
+      const field = fields[id];
+      if (!field) return;
+      field.className = 'demo-input';
+      field.textContent = '';
+    }
+
+    function setFieldCursor(id) {
+      const field = fields[id];
+      const cursor = document.createElement('span');
+      cursor.className = 'cursor-blink';
+      field.appendChild(cursor);
+    }
+
+    document.querySelectorAll('.trigger-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const trigger = pill.dataset.trigger;
+        const fieldId = pill.dataset.field;
+        const field = fields[fieldId];
+        if (!field) return;
+
+        // Reset and show trigger in field
+        resetField(fieldId);
+        field.textContent = '';
+        const tspan = document.createElement('span');
+        tspan.className = 'trigger-text';
+        tspan.textContent = trigger;
+        field.appendChild(tspan);
+        const cursor1 = document.createElement('span');
+        cursor1.className = 'cursor-blink';
+        field.appendChild(cursor1);
+
+        // After 500ms, replace with expansion
+        setTimeout(() => {
+          field.textContent = '';
+          field.className = 'demo-input active';
+          const expanded = expansions[trigger] || trigger;
+          // Render \n as line breaks for \pr
+          field.textContent = expanded.replace(/\\n/g, ' ');
+          pill.classList.add('fired');
+          setTimeout(() => pill.classList.remove('fired'), 800);
+        }, 520);
+      });
+    });
+
+    // Init first field with cursor
+    setFieldCursor('stack');
+  </script>
+</body>
+</html>

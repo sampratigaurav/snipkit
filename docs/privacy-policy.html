@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — SnipKit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0b;
+      --bg2: #131311;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8e6df;
+      --muted: #7a7870;
+      --subtle: #4a4844;
+      --accent: #1D9E75;
+      --accent-text: #5DCAA5;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+
+    /* Header */
+    .site-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 56px;
+      font-family: monospace;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .site-header a { color: var(--accent-text); text-decoration: none; }
+    .site-header a:hover { text-decoration: underline; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
+
+    /* Title block */
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--subtle);
+      font-family: monospace;
+      margin-bottom: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Sections */
+    section { margin-bottom: 40px; }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-text);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: monospace;
+      margin-bottom: 12px;
+    }
+
+    p { color: var(--muted); margin-bottom: 10px; }
+    p:last-child { margin-bottom: 0; }
+
+    .highlight {
+      background: rgba(29,158,117,0.08);
+      border: 1px solid rgba(29,158,117,0.18);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .perm-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .perm-name {
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--accent-text);
+      background: rgba(29,158,117,0.1);
+      border: 1px solid rgba(29,158,117,0.2);
+      border-radius: 4px;
+      padding: 2px 8px;
+      white-space: nowrap;
+      align-self: flex-start;
+      margin-top: 2px;
+    }
+
+    .perm-desc { color: var(--muted); }
+
+    /* Footer */
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--subtle);
+      font-family: monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--accent-text); }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="site-header">
+    <span class="dot"></span>
+    <a href="https://sampratigaurav.github.io/snipkit">SnipKit</a>
+    <span style="color:var(--subtle)">/ Privacy Policy</span>
+  </div>
+
+  <h1>Privacy Policy</h1>
+  <div class="subtitle">Last updated: April 1, 2026 &nbsp;·&nbsp; SnipKit v1.0.0</div>
+
+  <section>
+    <h2>Overview</h2>
+    <div class="highlight">
+      SnipKit is a text expansion tool that runs entirely inside your browser.
+      It does not collect, transmit, or store any information outside your device.
+      There are no servers, no accounts, no analytics, and no external network
+      requests of any kind. What you type stays on your machine.
+    </div>
+  </section>
+
+  <section>
+    <h2>Data We Collect</h2>
+    <p><strong style="color:var(--text)">None.</strong> SnipKit does not collect any user data.</p>
+    <p>No usage statistics, no crash reports, no telemetry, no identifiers, no IP addresses.
+       The extension has no mechanism to send any information anywhere — because it has no backend to send it to.</p>
+  </section>
+
+  <section>
+    <h2>Data Storage</h2>
+    <p>Your snippets (triggers and their expansion text) are stored in
+       <code style="font-size:13px; color:var(--accent-text); background:rgba(29,158,117,0.08); padding:1px 6px; border-radius:3px;">chrome.storage.local</code>
+       — the browser's built-in local storage API. This data lives exclusively on your device
+       inside your Chrome profile.</p>
+    <p>This data is never transmitted to any server. It is never synced to Google's cloud
+       (we do not use <code style="font-size:13px; color:var(--accent-text); background:rgba(29,158,117,0.08); padding:1px 6px; border-radius:3px;">chrome.storage.sync</code>).
+       It is never shared with any third party.</p>
+    <p>If you uninstall SnipKit, your snippet data remains in your browser's local storage
+       until Chrome clears it as part of its normal profile management.</p>
+  </section>
+
+  <section>
+    <h2>Permissions Explained</h2>
+
+    <div class="perm-row">
+      <span class="perm-name">storage</span>
+      <span class="perm-desc">Allows the extension to save your snippet library to
+        <code style="font-size:12px; color:var(--accent-text);">chrome.storage.local</code> on your device.
+        Without this, snippets could not persist between sessions.</span>
+    </div>
+
+    <div class="perm-row">
+      <span class="perm-name">activeTab</span>
+      <span class="perm-desc">Allows the extension to interact with the currently active browser tab.
+        This is required to detect text fields, inject expanded text, and open the command palette.
+        SnipKit only reads from and writes to the focused input element — it does not read
+        page content, form data, or any other information from the tab.</span>
+    </div>
+
+    <div class="perm-row">
+      <span class="perm-name">tabs</span>
+      <span class="perm-desc">Required to send the "open palette" message from the background
+        service worker to the content script running in the active tab when you press
+        Ctrl+Shift+Space. No tab URLs or tab content are read.</span>
+    </div>
+
+    <div class="perm-row">
+      <span class="perm-name">clipboardWrite</span>
+      <span class="perm-desc">Used by the command palette to copy your selected snippet
+        to the clipboard so it can be pasted into canvas-based editors like Google Docs,
+        where direct DOM injection is not possible.</span>
+    </div>
+
+    <div class="perm-row">
+      <span class="perm-name">clipboardRead</span>
+      <span class="perm-desc">Declared alongside clipboardWrite as required by Chrome's
+        clipboard permission model. SnipKit does not read clipboard contents.</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Third Parties</h2>
+    <p>SnipKit does not integrate with any third-party services. There are no analytics
+       providers (no Google Analytics, no Mixpanel, no Sentry). There are no advertising
+       networks. There are no feature flags or remote configuration services.</p>
+    <p>The extension makes zero outbound network requests at runtime. You can verify this
+       by opening Chrome DevTools → Network tab while SnipKit is running — it will be empty.</p>
+  </section>
+
+  <section>
+    <h2>Children's Privacy</h2>
+    <p>SnipKit does not collect any data from any users, including children under 13.
+       There is nothing to collect.</p>
+  </section>
+
+  <section>
+    <h2>Changes to This Policy</h2>
+    <p>If this privacy policy changes in a future version, the updated policy will be
+       published at this URL and the "Last updated" date at the top of this page will be revised.
+       Material changes that affect data handling will also be noted in the extension's
+       Chrome Web Store changelog.</p>
+  </section>
+
+  <section>
+    <h2>Contact</h2>
+    <p>Questions, concerns, or feedback about this privacy policy? Open an issue on GitHub:</p>
+    <p>
+      <a href="https://github.com/sampratigaurav/snipkit/issues"
+         style="color:var(--accent-text); text-decoration:none; font-family:monospace; font-size:13px;">
+        github.com/sampratigaurav/snipkit/issues
+      </a>
+    </p>
+  </section>
+
+  <footer>
+    <span>SnipKit is open source — <a href="https://github.com/sampratigaurav/snipkit">github.com/sampratigaurav/snipkit</a></span>
+    <span>Built by <a href="https://github.com/sampratigaurav">Samprati Gaurav</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

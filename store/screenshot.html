@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SnipKit — Screenshot 1280×800</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 1280px;
+      height: 800px;
+      overflow: hidden;
+      background: #0d0d0b;
+      font-family: 'DM Sans', sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP BANNER ── */
+    .banner {
+      flex-shrink: 0;
+      padding: 28px 60px 22px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: #0d0d0b;
+      position: relative;
+    }
+
+    .banner::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 10%; right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(29,158,117,0.3), transparent);
+    }
+
+    .banner-headline {
+      font-family: 'Instrument Serif', serif;
+      font-size: 42px;
+      color: #e8e6df;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+
+    .banner-sub {
+      margin-top: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: #4a4844;
+      letter-spacing: 0.04em;
+    }
+
+    .banner-sub strong {
+      color: #1D9E75;
+      font-weight: 500;
+    }
+
+    /* ── MAIN COLUMNS ── */
+    .columns {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 40px;
+      position: relative;
+    }
+
+    .col-before { background: #0f0e0c; }
+    .col-after  { background: #0b0f0d; }
+
+    /* Divider */
+    .divider {
+      width: 1px;
+      background: rgba(255,255,255,0.07);
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .divider::after {
+      content: 'VS';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #131311;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      color: #4a4844;
+      letter-spacing: 0.08em;
+    }
+
+    /* Column labels */
+    .col-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      align-self: flex-start;
+    }
+
+    .col-label-before { color: #4a4844; }
+    .col-label-after  { color: #1D9E75; }
+
+    /* Form card */
+    .form-card {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 10px;
+      padding: 22px 24px;
+      border: 1px solid;
+    }
+
+    .form-card-before {
+      background: #141210;
+      border-color: rgba(255,100,100,0.1);
+      box-shadow: 0 0 40px rgba(200,50,50,0.04);
+    }
+
+    .form-card-after {
+      background: #0e1512;
+      border-color: rgba(29,158,117,0.2);
+      box-shadow: 0 0 40px rgba(29,158,117,0.06);
+    }
+
+    .form-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e8e6df;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      letter-spacing: -0.01em;
+    }
+
+    .form-field {
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: #4a4844;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .field-input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 8px 11px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: #7a7870;
+      position: relative;
+    }
+
+    .field-input-after {
+      border-color: rgba(29,158,117,0.2);
+      background: rgba(29,158,117,0.04);
+      color: #5DCAA5;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 1.5px;
+      height: 13px;
+      background: #7a7870;
+      vertical-align: middle;
+      margin-left: 1px;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0 } }
+
+    /* Chaos card (before column) */
+    .chaos-note {
+      position: absolute;
+      top: 108px;
+      right: 32px;
+      background: #1a1816;
+      border: 1px solid rgba(255,200,100,0.15);
+      border-radius: 7px;
+      padding: 10px 12px;
+      width: 155px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      transform: rotate(2deg);
+    }
+
+    .chaos-note-title {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      color: #6a6560;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .chaos-note-line {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: #4a4844;
+      margin-bottom: 3px;
+      line-height: 1.4;
+    }
+
+    .chaos-note-line s { opacity: 0.5; }
+
+    /* Toast (after column) */
+    .toast {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: #131311;
+      border: 1px solid rgba(29,158,117,0.25);
+      border-radius: 7px;
+      padding: 8px 14px;
+      margin-top: 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: #5DCAA5;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      align-self: flex-start;
+      margin-left: 0;
+    }
+
+    /* Column captions */
+    .col-caption {
+      margin-top: 14px;
+      align-self: flex-start;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .col-caption-before { color: #3a3835; }
+    .col-caption-after  { color: #2a4a3a; }
+
+    /* ── BOTTOM BAR ── */
+    .bottom-bar {
+      flex-shrink: 0;
+      height: 52px;
+      background: #080807;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 60px;
+    }
+
+    .feature {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: #3a3835;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: rgba(29,158,117,0.4);
+    }
+
+    .feature:not(:last-child)::after {
+      content: '';
+      display: block;
+      width: 1px;
+      height: 14px;
+      background: rgba(255,255,255,0.06);
+      margin-left: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BANNER -->
+  <div class="banner">
+    <div class="banner-headline">Stop copy-pasting. Start shipping.</div>
+    <div class="banner-sub"><strong>SnipKit</strong> — keyboard-driven text expansion for developers</div>
+  </div>
+
+  <!-- COLUMNS -->
+  <div class="columns">
+
+    <!-- BEFORE -->
+    <div class="col col-before">
+      <div class="col-label col-label-before">Before SnipKit</div>
+
+      <!-- Floating chaos note -->
+      <div class="chaos-note">
+        <div class="chaos-note-title">📋 My snippets.txt</div>
+        <div class="chaos-note-line"><s>React, Node, TS…</s></div>
+        <div class="chaos-note-line">1DS22094 ← wrong?</div>
+        <div class="chaos-note-line">updated: last week?</div>
+      </div>
+
+      <div class="form-card form-card-before">
+        <div class="form-title">Hackathon Registration — DevFest 2025</div>
+
+        <div class="form-field">
+          <div class="field-label">Tech Stack Used</div>
+          <div class="field-input">React, Node...<span class="cursor"></span></div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">University ID</div>
+          <div class="field-input" style="color:#2e2c2a;">&nbsp;<span class="cursor" style="background:#3a3835;"></span></div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">Project Description</div>
+          <div class="field-input" style="height:46px; padding-top:9px; color:#2e2c2a;">&nbsp;</div>
+        </div>
+      </div>
+
+      <div class="col-caption col-caption-before">
+        Copy. Switch tab. Paste. Repeat.<br>Every. Single. Form.
+      </div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div class="divider"></div>
+
+    <!-- AFTER -->
+    <div class="col col-after">
+      <div class="col-label col-label-after">With SnipKit</div>
+
+      <div class="form-card form-card-after">
+        <div class="form-title">Hackathon Registration — DevFest 2025</div>
+
+        <div class="form-field">
+          <div class="field-label">Tech Stack Used</div>
+          <div class="field-input field-input-after">
+            React · TypeScript · Node.js · Socket.io · PostgreSQL
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">University ID</div>
+          <div class="field-input field-input-after">
+            1DS22CS094 — Samprati Gaurav
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">Project Description</div>
+          <div class="field-input field-input-after" style="height:46px; padding-top:9px;">
+            Hi, I'm Sam — a 2nd-year CS student at DSU.
+          </div>
+        </div>
+      </div>
+
+      <div class="toast">✓ Expanded: \stack</div>
+
+      <div class="col-caption col-caption-after">
+        Type \stack. Done. Move on.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bottom-bar">
+    <div class="feature">⚡&nbsp; Instant expansion</div>
+    <div class="feature">🔒&nbsp; 100% local · zero servers</div>
+    <div class="feature">⌨&nbsp; Works in every text field</div>
+  </div>
+
+</body>
+</html>

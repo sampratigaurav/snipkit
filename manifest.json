@@ -2,8 +2,9 @@
   "manifest_version": 3,
   "name": "SnipKit",
   "version": "1.0.0",
-  "description": "Keyboard-driven text expansion for developers. Type a trigger like \\stack and it expands to your full text block instantly.",
-  "permissions": ["storage", "activeTab", "tabs"],
+  "description": "Keyboard-driven text expansion for developers. Type \\stack and instantly inject your full tech stack anywhere on the web.",
+  "homepage_url": "https://sampratigaurav.github.io/snipkit",
+  "permissions": ["storage", "activeTab", "tabs", "clipboardRead", "clipboardWrite"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },

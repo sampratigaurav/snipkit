@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SnipKit — Promo Tile 440×280</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 440px;
+      height: 280px;
+      overflow: hidden;
+      background: #0d0d0b;
+      font-family: 'DM Mono', monospace;
+      position: relative;
+    }
+
+    /* Radial glow behind tagline */
+    .glow {
+      position: absolute;
+      width: 360px;
+      height: 200px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -52%);
+      background: radial-gradient(ellipse at center,
+        rgba(29,158,117,0.09) 0%,
+        rgba(29,158,117,0.03) 50%,
+        transparent 75%);
+      pointer-events: none;
+    }
+
+    /* Top-left wordmark */
+    .wordmark {
+      position: absolute;
+      top: 18px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #1D9E75;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px rgba(29,158,117,0.6);
+    }
+
+    .wordmark-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      font-weight: 500;
+      color: #e8e6df;
+      letter-spacing: 0.02em;
+    }
+
+    /* Center content */
+    .center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -54%);
+      text-align: center;
+      width: 100%;
+    }
+
+    .tagline {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: 38px;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .tagline-white { color: #e8e6df; }
+    .tagline-green { color: #1D9E75; }
+
+    /* Trigger pills */
+    .pills {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .pill {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      color: #5DCAA5;
+      background: rgba(29,158,117,0.15);
+      border: 1px solid rgba(29,158,117,0.3);
+      border-radius: 5px;
+      padding: 4px 12px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Bottom-right label */
+    .bottom-label {
+      position: absolute;
+      bottom: 16px;
+      right: 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: #4a4844;
+      letter-spacing: 0.03em;
+    }
+
+    /* Subtle top border accent */
+    .top-accent {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(29,158,117,0.4) 50%, transparent 100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="top-accent"></div>
+  <div class="glow"></div>
+
+  <div class="wordmark">
+    <div class="dot"></div>
+    <span class="wordmark-text">SnipKit</span>
+  </div>
+
+  <div class="center">
+    <div class="tagline">
+      <span class="tagline-white">Type \&nbsp;&nbsp;</span><span class="tagline-green">expand.</span>
+    </div>
+    <div class="pills">
+      <span class="pill">\stack</span>
+      <span class="pill">\usn</span>
+      <span class="pill">\intro</span>
+    </div>
+  </div>
+
+  <div class="bottom-label">Chrome Extension &nbsp;·&nbsp; Free</div>
+</body>
+</html>
