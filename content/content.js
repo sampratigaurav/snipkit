@@ -1,11 +1,9 @@
 // SnipKit - content.js
+'use strict';
 
-/**
- * Returns false if the extension context has been invalidated (e.g. the
- * extension was reloaded while this tab's old content script is still alive).
- * Accessing chrome.runtime.id throws in that state — we catch it here so
- * callers can bail out cleanly instead of throwing unhandled errors.
- */
+// ============================================================
+// CONTEXT VALIDITY
+// ============================================================
 function isExtensionContextValid() {
   try {
     return !!chrome.runtime?.id;
@@ -14,323 +12,462 @@ function isExtensionContextValid() {
   }
 }
 
-/**
- * Core expansion handler. Shared between 'input' and 'keyup' listeners.
- * Using two listeners because Google Search and some custom elements suppress
- * the 'input' event — 'keyup' acts as a reliable fallback.
- */
+// ============================================================
+// CROSS-ORIGIN IFRAME DETECTION (A-014)
+// Evaluated once at script load — much cheaper than per-keystroke.
+// Original code used window.top which misses same-origin grandchild
+// iframes; window.parent is the correct immediate-parent check.
+// ============================================================
+let _inCrossOriginIframe = false;
+try {
+  // Accessing window.parent.location.href throws DOMException when the
+  // immediate parent frame is cross-origin.
+  void window.parent.location.href;
+} catch (_e) {
+  _inCrossOriginIframe = (window !== window.parent);
+}
+
+// ============================================================
+// USAGE-COUNT QUEUE (A-003)
+// Serialises all storage writes to prevent the read→modify→write
+// race condition that silently drops increments when two expansions
+// happen in rapid succession.
+// ============================================================
+const _usageQueue = [];
+let   _usageFlushPending = false;
+
+function queueUsageIncrement(id) {
+  _usageQueue.push(id);
+  _flushUsageQueue();
+}
+
+function _flushUsageQueue() {
+  if (_usageFlushPending || _usageQueue.length === 0) return;
+  _usageFlushPending = true;
+
+  // Drain the entire queue in a single atomic read→write
+  const pending = _usageQueue.splice(0);
+
+  chrome.storage.local.get('snipkit_snippets', (data) => {
+    const snippets = data.snipkit_snippets || [];
+    pending.forEach(id => {
+      const idx = snippets.findIndex(s => s.id === id);
+      if (idx > -1) snippets[idx].usageCount = (snippets[idx].usageCount || 0) + 1;
+    });
+    chrome.storage.local.set({ snipkit_snippets: snippets }, () => {
+      _usageFlushPending = false;
+      _flushUsageQueue(); // drain anything that queued during the write
+    });
+  });
+}
+
+// ============================================================
+// CONTENTEDITABLE INSERTION (A-004)
+// Replaces the bare execCommand('insertText') with a layered
+// approach that covers framework-driven editors (React/Vue/Notion)
+// as well as standard contenteditable nodes.
+// ============================================================
+function insertTextIntoContentEditable(text) {
+  const target = document.activeElement;
+  if (!target) return false;
+
+  // Layer 1: Fire beforeinput — consumed by React/Vue/Quill/Tiptap editors.
+  // These editors handle 'insertText' beforeinput and update their virtual DOM,
+  // which then syncs to the real DOM. We fire this first so they can intercept.
+  try {
+    target.dispatchEvent(new InputEvent('beforeinput', {
+      inputType: 'insertText',
+      data: text,
+      bubbles: true,
+      cancelable: true,
+    }));
+  } catch (_) {}
+
+  // Layer 2: execCommand('insertText') — still the most cross-site reliable
+  // method in Chrome for standard contenteditable as of 2026.
+  try {
+    if (document.execCommand('insertText', false, text)) return true;
+  } catch (_) {}
+
+  // Layer 3: Manual range insertion — last resort when execCommand is unavailable.
+  try {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+  } catch (_) {}
+
+  return false;
+}
+
+// ============================================================
+// EXPANSION HANDLER
+// ============================================================
 function handleExpansion(event) {
   if (!isExtensionContextValid()) return;
-  // Don't interfere with palette's own input
-  if (event.target && event.target.id === 'snipkit-palette-input') return;
+  if (_inCrossOriginIframe) return; // (A-014)
 
   const target = event.target;
   if (!target) return;
 
+  // (A-017) Never trigger inside any SnipKit-owned UI element.
+  // Covers palette input, backdrop, toast, and any future elements.
+  if (target.closest && target.closest('#snipkit-shadow-host')) return;
+
   if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-    if (target.readOnly || target.disabled || target.type === 'password') {
-      return;
-    }
+    if (target.readOnly || target.disabled || target.type === 'password') return;
 
     let cursorPos;
     try {
       cursorPos = target.selectionStart;
-    } catch (e) {
-      // selectionStart throws on certain <input> types (e.g., number, email)
+    } catch (_) {
+      // selectionStart throws on certain <input> types (number, email, etc.)
       return;
     }
-
     if (typeof cursorPos !== 'number') return;
 
     const value = target.value;
     const scanStart = Math.max(0, cursorPos - 30);
     const textBeforeCursor = value.substring(scanStart, cursorPos);
 
-    // Extract from the last whitespace (or start of value) up to cursor
+    // Extract the word immediately before the cursor (split on whitespace)
     const words = textBeforeCursor.split(/\s/);
     const buffer = words[words.length - 1];
-
-    console.debug('[SnipKit] active element:', target.tagName, target.type || '');
-    console.debug('[SnipKit] buffer:', JSON.stringify(buffer));
-
     if (!buffer) return;
 
     const triggerStart = cursorPos - buffer.length;
 
     chrome.storage.local.get('snipkit_snippets', (data) => {
       const snippets = data.snipkit_snippets || [];
-      console.debug('[SnipKit] snippets loaded:', snippets.length, snippets.map(s => s.trigger));
-
       const normalizedBuffer = buffer.toLowerCase();
-      const matchedSnippet = snippets.find(s => s.trigger && s.trigger.toLowerCase() === normalizedBuffer);
+      const matched = snippets.find(s => s.trigger && s.trigger.toLowerCase() === normalizedBuffer);
+      if (!matched) return;
 
-      if (matchedSnippet) {
-        target.setRangeText(matchedSnippet.expansion, triggerStart, cursorPos, 'end');
+      target.setRangeText(matched.expansion, triggerStart, cursorPos, 'end');
+      target.dispatchEvent(new Event('input',  { bubbles: true }));
+      target.dispatchEvent(new Event('change', { bubbles: true }));
 
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-
-        console.debug('[SnipKit] expanded:', matchedSnippet.trigger);
-
-        chrome.storage.local.get('snipkit_snippets', (usageData) => {
-          const usageSnippets = usageData.snipkit_snippets || [];
-          const idx = usageSnippets.findIndex(s => s.id === matchedSnippet.id);
-          if (idx > -1) {
-            usageSnippets[idx].usageCount = (usageSnippets[idx].usageCount || 0) + 1;
-            chrome.storage.local.set({ snipkit_snippets: usageSnippets });
-          }
-        });
-      }
+      console.debug('[SnipKit] expanded (input):', matched.trigger);
+      queueUsageIncrement(matched.id); // (A-003) serialised write
     });
 
   } else if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') {
     // Skip code blocks and <pre> elements
-    if (target.getAttribute('role') === 'code' || target.closest('pre')) {
-      return;
-    }
-
-    // Skip cross-origin iframes
-    try {
-      if (window.top !== window) {
-        // Accessing cross-origin top properties will throw DOMException
-        const _ = window.top.location.href;
-      }
-    } catch (e) {
-      return;
-    }
+    if (target.getAttribute('role') === 'code' || target.closest('pre')) return;
 
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
     const range = sel.getRangeAt(0);
-    const node = range.startContainer;
+    const node  = range.startContainer;
     if (node.nodeType !== Node.TEXT_NODE) return;
 
-    const text = node.textContent;
+    const text   = node.textContent;
     const cursor = range.startOffset;
+    // Find the start of the current word (last space before cursor)
     const bufferStart = text.lastIndexOf(' ', cursor - 1) + 1;
     const buffer = text.slice(bufferStart, cursor);
-
-    console.debug('[SnipKit] active element: contenteditable');
-    console.debug('[SnipKit] buffer:', JSON.stringify(buffer));
-
     if (!buffer) return;
 
     chrome.storage.local.get('snipkit_snippets', (data) => {
       const snippets = data.snipkit_snippets || [];
-      console.debug('[SnipKit] snippets loaded:', snippets.length, snippets.map(s => s.trigger));
-
       const normalizedBuffer = buffer.toLowerCase();
-      const matchedSnippet = snippets.find(s => s.trigger && s.trigger.toLowerCase() === normalizedBuffer);
+      const matched = snippets.find(s => s.trigger && s.trigger.toLowerCase() === normalizedBuffer);
+      if (!matched) return;
 
-      if (matchedSnippet) {
-        const deleteRange = document.createRange();
-        deleteRange.setStart(node, bufferStart);
-        deleteRange.setEnd(node, cursor);
-        sel.removeAllRanges();
-        sel.addRange(deleteRange);
+      // Select the trigger text so insertTextIntoContentEditable replaces it
+      const deleteRange = document.createRange();
+      deleteRange.setStart(node, bufferStart);
+      deleteRange.setEnd(node, cursor);
+      sel.removeAllRanges();
+      sel.addRange(deleteRange);
 
-        // execCommand('insertText') is deprecated per spec but remains the most
-        // reliable cross-browser method for contenteditable injection as of 2025.
-        document.execCommand('insertText', false, matchedSnippet.expansion);
-
+      const ok = insertTextIntoContentEditable(matched.expansion); // (A-004)
+      if (ok) {
         target.dispatchEvent(new Event('input', { bubbles: true }));
-
-        console.debug('[SnipKit] expanded:', matchedSnippet.trigger);
-
-        chrome.storage.local.get('snipkit_snippets', (usageData) => {
-          const usageSnippets = usageData.snipkit_snippets || [];
-          const idx = usageSnippets.findIndex(s => s.id === matchedSnippet.id);
-          if (idx > -1) {
-            usageSnippets[idx].usageCount = (usageSnippets[idx].usageCount || 0) + 1;
-            chrome.storage.local.set({ snipkit_snippets: usageSnippets });
-          }
-        });
+        console.debug('[SnipKit] expanded (contenteditable):', matched.trigger);
+        queueUsageIncrement(matched.id); // (A-003)
       }
     });
   }
 }
 
-// Primary listener — fires on value change in standard inputs
-document.addEventListener('input', handleExpansion, true);
+// ============================================================
+// DOUBLE-EXPANSION DEDUP (A-002)
+// On a standard <input>/<textarea>, every keystroke fires both
+// the 'input' event AND 'keyup'. Without a guard, handleExpansion
+// runs twice: once per listener. The second call reads the
+// already-expanded value and can corrupt output.
+// Fix: 'keyup' is only handled if 'input' did NOT already fire
+// for this exact target within the last 50 ms.
+// ============================================================
+let _lastInputTarget = null;
+let _lastInputTime   = 0;
 
-// Fallback listener — Google Search and some custom elements suppress 'input';
-// 'keyup' ensures triggers are still caught on every keystroke.
-document.addEventListener('keyup', handleExpansion, true);
+document.addEventListener('input', (e) => {
+  _lastInputTarget = e.target;
+  _lastInputTime   = Date.now();
+  handleExpansion(e);
+}, true);
+
+document.addEventListener('keyup', (e) => {
+  const sameTarget   = e.target === _lastInputTarget;
+  const recentInput  = (Date.now() - _lastInputTime) < 50;
+  if (sameTarget && recentInput) return; // already handled by 'input'
+  handleExpansion(e);
+}, true);
 
 // ============================================================
-// COMMAND PALETTE
-// Inject styles once, immediately at script load time.
+// PALETTE CSS (A-005, A-012)
+// Stored as a JS string and applied via CSSStyleSheet.replaceSync()
+// + adoptedStyleSheets. This is a programmatic API (not an HTML
+// <style> tag), so it is NOT blocked by the page's Content-Security-
+// Policy — no web_accessible_resources entry required.
+// The shadow DOM boundary prevents host-page styles from leaking in.
 // ============================================================
-(function injectPaletteStyles() {
-  const style = document.createElement('style');
-  style.id = 'snipkit-palette-styles';
-  style.textContent = `
-    #snipkit-palette {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      z-index: 2147483647;
-      display: none;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 15vh;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    #snipkit-palette-box {
-      background: #131311;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 12px;
-      width: 560px;
-      max-width: 90vw;
-      overflow: hidden;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.6);
-      animation: snipkit-in 0.15s ease;
-    }
-    @keyframes snipkit-in {
-      from { opacity: 0; transform: scale(0.97) translateY(-6px); }
-      to   { opacity: 1; transform: scale(1) translateY(0); }
-    }
-    #snipkit-palette-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 16px 6px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    #snipkit-palette-logo {
-      font-size: 11px;
-      font-weight: 600;
-      color: #1D9E75;
-      letter-spacing: 0.04em;
-    }
-    #snipkit-palette-hint {
-      font-size: 10px;
-      color: #4a4844;
-    }
-    #snipkit-palette-input {
-      width: 100%;
-      background: transparent;
-      border: none;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      padding: 14px 16px;
-      font-size: 15px;
-      color: #e8e6df;
-      outline: none;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    #snipkit-palette-input::placeholder { color: #4a4844; }
-    #snipkit-palette-list {
-      list-style: none;
-      margin: 0;
-      padding: 6px;
-      max-height: 320px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255,255,255,0.1) transparent;
-    }
-    .snipkit-palette-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-radius: 7px;
-      cursor: pointer;
-      transition: background 0.1s;
-    }
-    .snipkit-palette-item.selected {
-      background: rgba(29,158,117,0.12);
-    }
-    .snipkit-palette-item:hover {
-      background: rgba(255,255,255,0.04);
-    }
-    .snipkit-palette-item.selected:hover {
-      background: rgba(29,158,117,0.15);
-    }
-    .snipkit-pill {
-      font-family: monospace;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(29,158,117,0.12);
-      color: #5DCAA5;
-      border: 1px solid rgba(29,158,117,0.25);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .snipkit-preview {
-      font-size: 12px;
-      color: #7a7870;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .snipkit-palette-item.selected .snipkit-preview {
-      color: #e8e6df;
-    }
-    #snipkit-palette-empty {
-      padding: 24px;
-      text-align: center;
-      font-size: 13px;
-      color: #4a4844;
-      list-style: none;
-    }
-    #snipkit-palette-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 16px;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      font-size: 10px;
-      color: #4a4844;
-    }
-    #snipkit-palette-count {
-      font-weight: 500;
-      color: #7a7870;
-    }
-    #snipkit-toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(8px);
-      background: #131311;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 8px;
-      padding: 10px 18px;
-      font-size: 13px;
-      color: #e8e6df;
-      font-family: system-ui, -apple-system, sans-serif;
-      z-index: 2147483647;
-      opacity: 0;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-      pointer-events: none;
-      white-space: nowrap;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-    #snipkit-toast.visible {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-  `;
-  document.head.appendChild(style);
-})();
+const PALETTE_CSS = `
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Overlay — full-viewport backdrop */
+  #snipkit-palette {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 2147483647;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 15vh;
+    font-family: system-ui, -apple-system, sans-serif;
+    pointer-events: none;
+  }
+  #snipkit-palette.open {
+    display: flex;
+    pointer-events: auto;
+  }
+
+  /* Palette card */
+  #snipkit-palette-box {
+    background: #131311;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    width: 560px;
+    max-width: 90vw;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+    animation: snipkit-in 0.15s ease;
+  }
+  @keyframes snipkit-in {
+    from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);    }
+  }
+
+  /* Header */
+  #snipkit-palette-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  #snipkit-palette-logo {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1D9E75;
+    letter-spacing: 0.04em;
+  }
+  #snipkit-palette-hint {
+    font-size: 10px;
+    color: #4a4844;
+  }
+
+  /* Search input */
+  #snipkit-palette-input {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 14px 16px;
+    font-size: 15px;
+    color: #e8e6df;
+    outline: none;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #snipkit-palette-input::placeholder { color: #4a4844; }
+
+  /* Snippet list */
+  #snipkit-palette-list {
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  #snipkit-palette-list::-webkit-scrollbar       { width: 4px; }
+  #snipkit-palette-list::-webkit-scrollbar-track  { background: transparent; }
+  #snipkit-palette-list::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* Snippet row */
+  .snipkit-palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .snipkit-palette-item.selected       { background: rgba(29,158,117,0.12); }
+  .snipkit-palette-item:hover          { background: rgba(255,255,255,0.04); }
+  .snipkit-palette-item.selected:hover { background: rgba(29,158,117,0.15); }
+
+  /* Trigger pill */
+  .snipkit-pill {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(29,158,117,0.12);
+    color: #5DCAA5;
+    border: 1px solid rgba(29,158,117,0.25);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Expansion preview */
+  .snipkit-preview {
+    font-size: 12px;
+    color: #7a7870;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+  .snipkit-palette-item.selected .snipkit-preview { color: #e8e6df; }
+
+  /* Empty state */
+  #snipkit-palette-empty {
+    padding: 24px;
+    text-align: center;
+    font-size: 13px;
+    color: #4a4844;
+    list-style: none;
+  }
+
+  /* Footer */
+  #snipkit-palette-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 10px;
+    color: #4a4844;
+  }
+  #snipkit-palette-count {
+    font-weight: 500;
+    color: #7a7870;
+  }
+
+  /* Toast */
+  #snipkit-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: #131311;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 13px;
+    color: #e8e6df;
+    font-family: system-ui, -apple-system, sans-serif;
+    z-index: 2147483647;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #snipkit-toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+`;
+
+// ============================================================
+// SHADOW DOM HOST (A-005, A-006, A-012)
+// Created lazily on first palette open so it does not affect
+// pages where the palette is never used.
+// ============================================================
+let _shadowRoot = null;
+let _shadowHost = null;
+
+function ensureShadowRoot() {
+  if (_shadowRoot) return;
+
+  _shadowHost = document.createElement('div');
+  _shadowHost.id = 'snipkit-shadow-host';
+  // Cover the viewport with pointer-events:none so it never
+  // blocks interaction when the palette is closed.
+  _shadowHost.style.cssText =
+    'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+
+  // (A-006) Guard against null body on a still-loading page
+  (document.body || document.documentElement).appendChild(_shadowHost);
+
+  _shadowRoot = _shadowHost.attachShadow({ mode: 'closed' });
+
+  // (A-005) adoptedStyleSheets is a JS API — NOT blocked by page CSP.
+  // This is the recommended approach for extension UIs that must work
+  // on CSP-strict sites (GitHub, Linear, banking apps, etc.).
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(PALETTE_CSS);
+  _shadowRoot.adoptedStyleSheets = [sheet];
+}
 
 // ============================================================
 // PALETTE STATE
 // ============================================================
-let paletteVisible = false;
-let paletteSnippets = [];
+let paletteVisible          = false;
+let paletteSnippets         = [];
 let filteredPaletteSnippets = [];
-let selectedIndex = 0;
-let paletteOverlay = null;
-let lastFocusedElement = null; // element focused before palette opened
+let selectedIndex           = 0;
+let lastFocusedElement      = null; // element focused before palette opened
+
+// Stored DOM references — avoids repeated shadow-root queries
+let _paletteOverlay = null;
+let _paletteInput   = null;
+let _paletteList    = null;
+let _paletteCount   = null;
+let _toastEl        = null;
 
 // ============================================================
 // CREATE PALETTE DOM (idempotent — only builds once)
 // ============================================================
 function createPalette() {
-  if (document.getElementById('snipkit-palette')) return;
+  if (_paletteOverlay) return; // already built
 
+  ensureShadowRoot(); // (A-006, A-012)
+
+  // Overlay (full-screen backdrop)
   const overlay = document.createElement('div');
   overlay.id = 'snipkit-palette';
 
@@ -376,10 +513,17 @@ function createPalette() {
   box.appendChild(list);
   box.appendChild(footer);
   overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  paletteOverlay = overlay;
 
-  // Close on backdrop click
+  // Append into shadow root — completely isolated from page DOM (A-012)
+  _shadowRoot.appendChild(overlay);
+
+  // Store references
+  _paletteOverlay = overlay;
+  _paletteInput   = input;
+  _paletteList    = list;
+  _paletteCount   = count;
+
+  // Close on backdrop click (click on overlay but not on the box)
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closePalette();
   });
@@ -399,29 +543,32 @@ function createPalette() {
 function openPalette() {
   if (!isExtensionContextValid()) return;
 
-  // Save whatever element has focus so we can restore it after closing
+  // Save the currently focused element to restore after closing
   lastFocusedElement = document.activeElement;
 
   createPalette();
-  chrome.storage.local.get('snipkit_snippets', function (data) {
+  chrome.storage.local.get('snipkit_snippets', (data) => {
     paletteSnippets = data.snipkit_snippets || [];
     filterPalette('');
-    const el = document.getElementById('snipkit-palette');
-    el.style.display = 'flex';
-    document.getElementById('snipkit-palette-input').value = '';
-    document.getElementById('snipkit-palette-input').focus();
+    _paletteOverlay.classList.add('open');
+    _paletteInput.value = '';
+    _paletteInput.focus();
     paletteVisible = true;
   });
 }
 
 function closePalette() {
-  const el = document.getElementById('snipkit-palette');
-  if (el) el.style.display = 'none';
+  if (_paletteOverlay) _paletteOverlay.classList.remove('open');
   paletteVisible = false;
-  selectedIndex = 0;
+  selectedIndex  = 0;
 
-  // Restore focus synchronously to the element that was active before the palette opened
-  if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+  // (A-009) Only restore focus if the element is still connected to the DOM.
+  // After extension reload (context invalidation), the stored reference is a
+  // detached node — calling .focus() on it throws or silently no-ops.
+  if (
+    lastFocusedElement?.isConnected &&
+    typeof lastFocusedElement.focus === 'function'
+  ) {
     lastFocusedElement.focus();
   }
 }
@@ -440,24 +587,22 @@ function filterPalette(query) {
   selectedIndex = 0;
   renderPaletteList();
 
-  const countEl = document.getElementById('snipkit-palette-count');
-  if (countEl) {
-    countEl.textContent =
+  if (_paletteCount) {
+    _paletteCount.textContent =
       filteredPaletteSnippets.length + ' snippet' +
       (filteredPaletteSnippets.length !== 1 ? 's' : '');
   }
 }
 
 function renderPaletteList() {
-  const list = document.getElementById('snipkit-palette-list');
-  if (!list) return;
-  list.innerHTML = '';
+  if (!_paletteList) return;
+  _paletteList.innerHTML = '';
 
   if (filteredPaletteSnippets.length === 0) {
     const empty = document.createElement('li');
     empty.id = 'snipkit-palette-empty';
     empty.textContent = 'No snippets found.';
-    list.appendChild(empty);
+    _paletteList.appendChild(empty);
     return;
   }
 
@@ -480,36 +625,52 @@ function renderPaletteList() {
     li.appendChild(preview);
 
     li.addEventListener('click', () => selectSnippet(i));
+
+    // (A-008) Toggle .selected class in-place instead of rebuilding the entire
+    // list on every mouseenter — eliminates the O(n) re-render storm.
     li.addEventListener('mouseenter', () => {
+      _paletteList.querySelector('.snipkit-palette-item.selected')
+        ?.classList.remove('selected');
+      li.classList.add('selected');
       selectedIndex = i;
-      renderPaletteList();
     });
 
-    list.appendChild(li);
+    _paletteList.appendChild(li);
   });
 
-  // Scroll selected into view
-  const selected = list.querySelector('.selected');
-  if (selected) selected.scrollIntoView({ block: 'nearest' });
+  // Scroll selected item into view
+  _paletteList.querySelector('.selected')
+    ?.scrollIntoView({ block: 'nearest' });
 }
 
 // ============================================================
 // KEYBOARD NAVIGATION
 // ============================================================
 function handlePaletteKey(e) {
+  const items = _paletteList
+    ? Array.from(_paletteList.querySelectorAll('.snipkit-palette-item'))
+    : [];
+
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     selectedIndex = Math.min(selectedIndex + 1, filteredPaletteSnippets.length - 1);
-    renderPaletteList();
+    // (A-008) Toggle class, no full re-render
+    items.forEach((item, i) => item.classList.toggle('selected', i === selectedIndex));
+    items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     selectedIndex = Math.max(selectedIndex - 1, 0);
-    renderPaletteList();
+    // (A-008) Toggle class, no full re-render
+    items.forEach((item, i) => item.classList.toggle('selected', i === selectedIndex));
+    items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (filteredPaletteSnippets[selectedIndex]) {
       selectSnippet(selectedIndex);
     }
+
   } else if (e.key === 'Escape') {
     closePalette();
   }
@@ -523,7 +684,8 @@ async function selectSnippet(index) {
   if (!snippet) return;
 
   // Step 1: Copy to clipboard FIRST — palette is still open and focused here,
-  // so clipboard permission is valid. Closing first would revoke it.
+  // so navigator.clipboard permission is valid under the current user gesture.
+  // Closing first would move focus away and revoke the permission.
   let copied = false;
 
   try {
@@ -532,14 +694,14 @@ async function selectSnippet(index) {
     console.debug('[SnipKit] clipboard write success');
   } catch (err) {
     console.debug('[SnipKit] clipboard API failed, trying execCommand fallback:', err);
-    // Fallback: append textarea inside palette box so focus stays within the
-    // extension overlay and execCommand('copy') remains permitted.
+    // Fallback: append a textarea inside the palette box so focus stays within
+    // the extension overlay and execCommand('copy') remains permitted.
     try {
       const ta = document.createElement('textarea');
       ta.value = snippet.expansion;
       ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
-      const box = document.getElementById('snipkit-palette-box');
-      (box || document.body).appendChild(ta);
+      const box = _shadowRoot.getElementById('snipkit-palette-box');
+      (box || _shadowRoot).appendChild(ta);
       ta.focus();
       ta.select();
       copied = document.execCommand('copy');
@@ -550,16 +712,18 @@ async function selectSnippet(index) {
     }
   }
 
-  // Step 2: Close palette — closePalette() synchronously restores focus
+  // Step 2: Close palette — closePalette() synchronously restores focus (A-009)
   closePalette();
 
   // Step 3: Let the browser commit the focus change
   await new Promise(r => setTimeout(r, 80));
 
-  // Step 4: Re-assert focus on the pre-palette element.
-  // closePalette() already called .focus() but the 80ms wait may have
-  // let the browser reset it to <body>, so we do it again.
-  if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+  // Step 4: Re-assert focus (80ms may have let the browser reset it to <body>)
+  // (A-009) isConnected guard prevents errors on detached elements
+  if (
+    lastFocusedElement?.isConnected &&
+    typeof lastFocusedElement.focus === 'function'
+  ) {
     lastFocusedElement.focus();
   }
 
@@ -567,11 +731,11 @@ async function selectSnippet(index) {
   let docsTarget = null;
   try {
     docsTarget = document.querySelector('.docs-texteventtarget-iframe');
-    if (docsTarget && docsTarget.contentDocument) {
+    if (docsTarget?.contentDocument) {
       docsTarget.contentDocument.body.focus();
     }
-  } catch (e) {
-    docsTarget = null; // cross-origin — treat as non-Docs page
+  } catch (_) {
+    docsTarget = null; // cross-origin — not a Docs page
   }
 
   if (!copied) {
@@ -583,31 +747,32 @@ async function selectSnippet(index) {
   const el = document.activeElement;
   let injected = false;
 
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
-      !el.readOnly && !el.disabled && el.type !== 'password') {
+  if (
+    el &&
+    (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
+    !el.readOnly && !el.disabled && el.type !== 'password'
+  ) {
     try {
       const start = el.selectionStart ?? el.value.length;
-      const end = el.selectionEnd ?? el.value.length;
+      const end   = el.selectionEnd   ?? el.value.length;
       el.setRangeText(snippet.expansion, start, end, 'end');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('input',  { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
       injected = true;
-    } catch (e) {}
-  } else if (el && el.isContentEditable) {
-    // contenteditable (Notion, GitHub issues, etc.)
-    try {
-      document.execCommand('insertText', false, snippet.expansion);
-      injected = true;
-    } catch (e) {}
+    } catch (_) {}
+
+  } else if (el?.isContentEditable) {
+    // (A-004) Use layered insertion for contenteditable
+    injected = insertTextIntoContentEditable(snippet.expansion);
   }
 
-  // Step 6: For canvas/Docs — simulate Ctrl+Shift+V.
-  // Chrome's clipboard trust is tied to a user gesture in the browsing context.
-  // Ctrl+Shift+V (paste-without-formatting) bypasses this in Google Docs
-  // and is generally more reliable than a plain Ctrl+V after a focus shift.
+  // Step 6: For canvas / Google Docs — simulate Ctrl+Shift+V.
+  // Chrome's clipboard trust requires the paste to be within the same
+  // event loop tick as a user gesture. Ctrl+Shift+V (paste without
+  // formatting) is handled by Docs as a distinct command and is more
+  // reliable than Ctrl+V after a focus shift.
   if (!injected) {
-    // Dispatch to Docs iframe body if available, otherwise active element
-    const pasteTarget = (docsTarget && docsTarget.contentDocument)
+    const pasteTarget = docsTarget?.contentDocument
       ? docsTarget.contentDocument.body
       : document.activeElement;
 
@@ -615,30 +780,21 @@ async function selectSnippet(index) {
       pasteTarget.dispatchEvent(new KeyboardEvent(type, {
         key: 'v', code: 'KeyV',
         ctrlKey: true, shiftKey: true,
-        bubbles: true, cancelable: true
+        bubbles: true, cancelable: true,
       }));
     });
 
-    // Give the key events a moment to be processed, then also attempt
-    // execCommand paste as a secondary fallback
     await new Promise(r => setTimeout(r, 50));
-    try { document.execCommand('paste'); } catch (e) {}
+    try { document.execCommand('paste'); } catch (_) {}
 
     showToast('\u2713 Copied! Press Ctrl+Shift+V to paste in Docs.', 'success');
   } else {
     showToast('\u2713 Expanded: ' + snippet.trigger, 'success');
   }
 
-  // Step 7: Increment usage count
+  // Step 7: Increment usage count via serialised queue (A-003)
   if (isExtensionContextValid()) {
-    chrome.storage.local.get('snipkit_snippets', function (d) {
-      const all = d.snipkit_snippets || [];
-      const idx = all.findIndex(s => s.id === snippet.id);
-      if (idx > -1) {
-        all[idx].usageCount = (all[idx].usageCount || 0) + 1;
-        chrome.storage.local.set({ snipkit_snippets: all });
-      }
-    });
+    queueUsageIncrement(snippet.id);
   }
 
   console.debug('[SnipKit] palette expand done:', snippet.trigger);
@@ -648,23 +804,31 @@ async function selectSnippet(index) {
 // TOAST NOTIFICATION
 // ============================================================
 function showToast(message, type = 'success') {
-  // Remove any existing toast
-  const existing = document.getElementById('snipkit-toast');
-  if (existing) existing.remove();
+  // Ensure shadow root exists (A-006) — toast can be shown even without
+  // the palette having been opened yet.
+  ensureShadowRoot();
 
-  const toast = document.createElement('div');
-  toast.id = 'snipkit-toast';
-  toast.textContent = message;
-  document.body.appendChild(toast);
+  // Reuse existing toast element rather than creating a new one each time
+  if (!_toastEl || !_toastEl.isConnected) {
+    _toastEl = document.createElement('div');
+    _toastEl.id = 'snipkit-toast';
+    _shadowRoot.appendChild(_toastEl);
+  }
 
-  // Force reflow so the transition fires from the initial state
-  toast.getBoundingClientRect();
-  toast.classList.add('visible');
+  _toastEl.classList.remove('visible');
+  _toastEl.textContent = message;
 
-  const duration = type === 'success' ? 2500 : 4000;
+  // Force reflow so the transition fires from the initial (hidden) state
+  _toastEl.getBoundingClientRect();
+  _toastEl.classList.add('visible');
+
+  const duration    = type === 'success' ? 2500 : 4000;
+  const thisMessage = message;
   setTimeout(() => {
-    toast.classList.remove('visible');
-    setTimeout(() => toast.remove(), 300);
+    // Only hide if this is still the same message (no newer toast replaced it)
+    if (_toastEl && _toastEl.textContent === thisMessage) {
+      _toastEl.classList.remove('visible');
+    }
   }, duration);
 }
 

@@ -262,6 +262,20 @@ body::-webkit-scrollbar-thumb { background: var(--subtle); border-radius: 2px; }
   background: var(--danger-bg);
 }
 
+/* A-011: Two-click delete — armed state */
+.delete-btn.armed {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid rgba(226,75,74,0.4);
+  font-weight: 700;
+  animation: armed-pulse 0.8s ease infinite alternate;
+}
+
+@keyframes armed-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.65; }
+}
+
 /* ============================================================
    EMPTY STATE
    ============================================================ */

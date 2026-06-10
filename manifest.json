@@ -4,7 +4,7 @@
   "version": "1.0.1",
   "description": "Keyboard-driven text expansion for developers. Type \\stack and instantly inject your full tech stack anywhere on the web.",
   "homepage_url": "https://sampratigaurav.github.io/snipkit",
-  "permissions": ["storage", "tabs", "clipboardRead", "clipboardWrite"],
+  "permissions": ["storage", "tabs"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },

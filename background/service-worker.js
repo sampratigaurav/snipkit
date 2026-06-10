@@ -1,80 +1,57 @@
 // SnipKit - service-worker.js
 
-chrome.runtime.onInstalled.addListener(function () {
-  const seed = [
-    {
-      id: '1',
-      trigger: '\\usn',
-      expansion: '1DS22CS094 \u2014 Samprati Gaurav, Dayananda Sagar University',
-      category: 'work',
-      usageCount: 0,
-      createdAt: Date.now()
-    },
-    {
-      id: '2',
-      trigger: '\\stack',
-      expansion: 'React \u00b7 TypeScript \u00b7 Node.js \u00b7 Socket.io \u00b7 PostgreSQL \u00b7 Tailwind CSS \u00b7 Vite',
-      category: 'hackathon',
-      usageCount: 0,
-      createdAt: Date.now()
-    },
-    {
-      id: '3',
-      trigger: '\\intro',
-      expansion: "Hi, I'm Sam \u2014 a 2nd-year CS (Cyber Security) student at DSU. I build and ship web apps independently.",
-      category: 'work',
-      usageCount: 0,
-      createdAt: Date.now()
-    },
-    {
-      id: '4',
-      trigger: '\\repo',
-      expansion: 'https://github.com/samprati-gaurav \u2014 SyncWatch, Duet, SnipKit',
-      category: 'github',
-      usageCount: 0,
-      createdAt: Date.now()
-    },
-    {
-      id: '5',
-      trigger: '\\pr',
-      expansion: '## Summary\n**What**: \n**Why**: \n**Testing**: ',
-      category: 'github',
-      usageCount: 0,
-      createdAt: Date.now()
-    }
-  ];
+// (A-016) Single source of truth: import seed from shared module
+// No longer duplicating the seed array inline
+import { seedDefaultSnippets } from '../shared/storage.js';
 
-  chrome.storage.local.set({ snipkit_snippets: seed }).then(() => {
-    console.debug('[SnipKit] Seed data written:', seed.length, 'snippets.');
+// ============================================================
+// ON INSTALLED — seed default snippets once
+// ============================================================
+chrome.runtime.onInstalled.addListener(async function () {
+  try {
+    await seedDefaultSnippets();
     console.log('[SnipKit] Extension installed and ready.');
-  }).catch(err => {
-    console.error('[SnipKit] Failed to write seed data:', err);
-  });
+  } catch (err) {
+    console.error('[SnipKit] Failed to seed data on install:', err);
+  }
 });
 
 // ============================================================
-// COMMAND PALETTE — relay shortcut to content script
+// COMMAND PALETTE — relay shortcut to content script (A-007)
 // ============================================================
 chrome.commands.onCommand.addListener(function (command) {
-  if (command === 'open-palette') {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      if (!tabs[0]) return;
-      try {
-        chrome.tabs.sendMessage(
-          tabs[0].id,
-          { action: 'toggle-palette' },
-          function (response) {
-            // Consume lastError to suppress "Receiving end does not exist"
-            // which fires when the tab hasn't loaded the content script yet
-            // (e.g. chrome:// pages or tabs opened before the extension loaded).
-            if (chrome.runtime.lastError) {
-              console.debug('[SnipKit] Tab not ready for palette:', chrome.runtime.lastError.message);
-            }
-          }
-        );
-      } catch (e) {
-        console.debug('[SnipKit] Could not send message to tab:', e.message);
+  if (command !== 'open-palette') return;
+
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    const tab = tabs?.[0];
+    if (!tab?.url) return;
+
+    // (A-007) Skip privileged URLs where content scripts cannot be injected.
+    // Without this guard, sendMessage throws on chrome:// tabs and the
+    // shortcut appears broken to the user with no feedback.
+    const url = tab.url;
+    if (
+      url.startsWith('chrome://') ||
+      url.startsWith('chrome-extension://') ||
+      url.startsWith('devtools://') ||
+      url.startsWith('edge://') ||
+      url.startsWith('about:')
+    ) {
+      console.debug('[SnipKit] Shortcut blocked on privileged page:', url);
+      return;
+    }
+
+    chrome.tabs.sendMessage(
+      tab.id,
+      { action: 'toggle-palette' },
+      function () {
+        // Consume lastError to suppress "Receiving end does not exist"
+        // (fires when the tab hasn't loaded the content script yet,
+        // e.g. a tab that was open before the extension was installed).
+        if (chrome.runtime.lastError) {
+          console.debug('[SnipKit] Tab not ready for palette:', chrome.runtime.lastError.message);
+        }
       }
-    });
-  }
+    );
+  });
 });

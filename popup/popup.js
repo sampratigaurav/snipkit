@@ -9,12 +9,25 @@ import {
 } from '../shared/storage.js';
 
 // ============================================================
+// UUID helper (A-015)
+// ============================================================
+function generateId() {
+  return typeof crypto?.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+// ============================================================
 // STATE
 // ============================================================
-let allSnippets = [];
+let allSnippets    = [];
 let activeCategory = 'all';
-let searchQuery = '';
-let editingId = null;
+let searchQuery    = '';
+let editingId      = null;
+
+// (A-011) Two-click delete state — maps snippet id → timeout handle.
+// No window.confirm() which is unreliable in extension popup contexts.
+const _deleteState = new Map();
 
 // ============================================================
 // INIT
@@ -40,7 +53,7 @@ async function loadAndRender() {
 }
 
 function renderList() {
-  const list = document.getElementById('snippet-list');
+  const list       = document.getElementById('snippet-list');
   const emptyState = document.getElementById('empty-state');
 
   // Filter by category
@@ -57,16 +70,13 @@ function renderList() {
     );
   }
 
-  // Clear existing <li> items (leave #empty-state in place)
-  const existingItems = list.querySelectorAll('.snippet-item');
-  existingItems.forEach(el => el.remove());
+  // Clear existing snippet items (leave #empty-state in place)
+  list.querySelectorAll('.snippet-item').forEach(el => el.remove());
 
   if (filtered.length === 0) {
     emptyState.classList.remove('hidden');
     return;
   }
-
-  // Snippets exist — ensure empty state is hidden
   emptyState.classList.add('hidden');
 
   filtered.forEach(snippet => {
@@ -102,12 +112,40 @@ function renderList() {
     editBtn.title = 'Edit';
     editBtn.addEventListener('click', () => openModal(snippet));
 
-    // Delete button
+    // (A-011) Two-click delete — avoids window.confirm() which is unreliable
+    // in extension popup contexts (can return true without showing a dialog).
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
     deleteBtn.textContent = '×';
     deleteBtn.title = 'Delete';
-    deleteBtn.addEventListener('click', () => handleDelete(snippet.id, snippet.trigger));
+
+    deleteBtn.addEventListener('click', () => {
+      const id = snippet.id;
+
+      if (_deleteState.has(id)) {
+        // Second click within 3 s — confirmed, proceed with deletion
+        clearTimeout(_deleteState.get(id));
+        _deleteState.delete(id);
+        handleDelete(id);
+      } else {
+        // First click — arm the button
+        deleteBtn.textContent = '?';
+        deleteBtn.title = 'Click again to confirm delete';
+        deleteBtn.classList.add('armed');
+
+        const timer = setTimeout(() => {
+          // Disarm after 3 s with no second click
+          if (deleteBtn.isConnected) {
+            deleteBtn.textContent = '×';
+            deleteBtn.title = 'Delete';
+            deleteBtn.classList.remove('armed');
+          }
+          _deleteState.delete(id);
+        }, 3000);
+
+        _deleteState.set(id, timer);
+      }
+    });
 
     li.appendChild(triggerSpan);
     li.appendChild(previewSpan);
@@ -161,7 +199,7 @@ function bindEvents() {
   // Trigger auto-prefix: if user blurs the field without a leading '\', prepend it
   document.getElementById('modal-trigger').addEventListener('blur', () => {
     const input = document.getElementById('modal-trigger');
-    const val = input.value;
+    const val   = input.value;
     if (val && !val.startsWith('\\')) {
       input.value = '\\' + val;
     }
@@ -169,7 +207,7 @@ function bindEvents() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    const overlay = document.getElementById('modal-overlay');
+    const overlay   = document.getElementById('modal-overlay');
     const modalOpen = !overlay.classList.contains('hidden');
 
     // Cmd/Ctrl+Enter → save modal
@@ -223,16 +261,15 @@ function closeModal() {
 // SAVE
 // ============================================================
 async function handleSave() {
-  const triggerInput = document.getElementById('modal-trigger');
-  const expansionInput = document.getElementById('modal-expansion');
-  const categoryInput = document.getElementById('modal-category');
-  const errorEl = document.getElementById('trigger-error');
+  const triggerInput    = document.getElementById('modal-trigger');
+  const expansionInput  = document.getElementById('modal-expansion');
+  const categoryInput   = document.getElementById('modal-category');
+  const errorEl         = document.getElementById('trigger-error');
 
-  const trigger = triggerInput.value.trim().toLowerCase();
+  const trigger   = triggerInput.value.trim().toLowerCase();
   const expansion = expansionInput.value.trim();
-  const category = categoryInput.value;
+  const category  = categoryInput.value;
 
-  // Clear previous error
   errorEl.textContent = '';
 
   // Validate trigger format
@@ -271,12 +308,12 @@ async function handleSave() {
   try {
     const existing = editingId ? allSnippets.find(s => s.id === editingId) : null;
     await saveSnippet({
-      id: editingId || crypto.randomUUID(),
+      id:         editingId || generateId(), // (A-015)
       trigger,
       expansion,
       category,
       usageCount: existing ? existing.usageCount : 0,
-      createdAt: existing ? existing.createdAt : Date.now()
+      createdAt:  existing ? existing.createdAt  : Date.now()
     });
     await loadAndRender();
     closeModal();
@@ -287,10 +324,11 @@ async function handleSave() {
 }
 
 // ============================================================
-// DELETE
+// DELETE (A-011)
+// Confirmation is handled by the two-click button in renderList.
+// handleDelete simply performs the deletion without window.confirm().
 // ============================================================
-async function handleDelete(id, trigger) {
-  if (!confirm('Delete ' + trigger + '?')) return;
+async function handleDelete(id) {
   try {
     await deleteSnippet(id);
     await loadAndRender();
@@ -306,9 +344,9 @@ async function handleExport() {
   try {
     const json = await exportData();
     const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = 'snipkit-snippets.json';
     a.click();
     URL.revokeObjectURL(url);
@@ -324,7 +362,7 @@ async function handleImport(e) {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    const text = await file.text();
+    const text   = await file.text();
     const result = await importData(text);
     alert('Imported ' + result.imported + ' snippets. Skipped ' + result.skipped + '.');
     await loadAndRender();

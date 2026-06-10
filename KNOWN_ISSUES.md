@@ -117,20 +117,20 @@ system, and works reliably on the first keypress.
 
 ---
 
-## KI-007 — `clipboardRead` / `clipboardWrite` Manifest Permissions Not Used
+## KI-007 — Clipboard Manifest Permissions
 
 **Severity:** Informational
 **Affects:** `manifest.json`
 
 **Description:**
-These permissions were added and later removed after audit. In Manifest V3,
-clipboard access in content scripts is governed by the **active tab's** security
-context and the `navigator.clipboard` API's own permissions — not by extension
-manifest permissions. Declaring `clipboardRead`/`clipboardWrite` in a MV3
-extension triggers a Chrome Web Store policy review flag without providing any
-benefit.
+`clipboardRead` and `clipboardWrite` manifest permissions are NOT declared
+in SnipKit. In Manifest V3, clipboard access in content scripts is governed
+by the active tab's security context and the `navigator.clipboard` API's own
+permissions — not by extension manifest permissions. Declaring these permissions
+in a MV3 extension triggers a Chrome Web Store policy review flag without
+providing any functional benefit.
 
-**Current state:** Permissions are `["storage", "activeTab", "tabs"]` — correct.
+**Current state:** Permissions are `["storage", "tabs"]` — correct and minimal.
 
 ---
 
